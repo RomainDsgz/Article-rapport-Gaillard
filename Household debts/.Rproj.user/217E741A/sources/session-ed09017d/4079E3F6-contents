@@ -1,0 +1,37 @@
+# clean environment 
+rm(list=ls())
+
+
+# load packages
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(readxl)
+library(ggplot2)
+library(areaplot)
+library(scales)
+library(stringr)
+
+# Import data
+df <- read_xlsx("householddebts.xlsx")
+
+# Graph
+ggplot(df, aes(x = year, y = debtstoincome)) +
+  geom_line(linewidth = 1) +
+  labs(
+    title = "Gross debt-to-income ratio of households",
+    subtitle = "Switzerland, 1999–2023",
+    x = "Year",
+    y = "Debts of households (in % of total income)",
+    caption = "Source: Eurostat, 2025"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(size = 12, colour = "grey30"),
+    axis.title.y = element_text(face = "bold"),
+    axis.title.x = element_text(face = "bold")
+  )
+ggsave("household_debts.jpg", width = 25, height = 18, units = "cm")

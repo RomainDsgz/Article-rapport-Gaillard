@@ -1,0 +1,78 @@
+# clean environment 
+rm(list=ls())
+
+
+# load packages
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(readxl)
+library(ggplot2)
+library(areaplot)
+library(scales)
+library(stringr)
+
+# Import data
+df <- read_xlsx("labourmarketslack2064.xlsx")
+
+ggsave("ratiofoodenergy.jpg", width = 18, height = 15, units = "cm")
+
+# Create a graph with stacked data
+
+# Transform data format
+df_long <- df %>%
+  pivot_longer(cols = c(unemployed, underemployed, seeking, available),
+               names_to = "category",
+               values_to = "value")
+
+df_long$category <- factor(df_long$category,
+                           levels = c("unemployed", "underemployed", "seeking", "available"))
+df_long$category2 <- factor(df_long$category,
+                           levels = c("available", "seeking", "underemployed", "unemployed"))
+# Pas besoin
+# ---- 2. Facteur avec food au-dessus et energy en bas ----
+# (le premier niveau = bas du graphique)
+#df_long$category <- factor(df_long$category, levels = c("food", "energy"))
+
+# Pas besoin
+# ---- 3. Coefficient pour 2e axe ----
+coef <- max(df_long$value, na.rm = TRUE) / max(df$ratio, na.rm = TRUE)
+
+# ---- 4. Graphique ----
+ggplot(df_long, aes(x = year)) +
+  geom_area(
+    aes(y = value, fill = category2),
+    position = "stack",
+    alpha = 0.8
+  ) +
+  scale_fill_manual(
+    name = NULL,
+    values = c(
+      "available" = "#009E73",
+      "seeking" = "#D55E00",
+      "underemployed" = "#56B4E9",
+      "unemployed" = "#E69F00"
+    ),
+    labels = c("Persons available to work but not seeking", "Persons seeking work but not immediately available", 
+               "Underemployed persons working part-time", "Unemployed persons"),
+    guide = guide_legend(ncol = 2, byrow = TRUE)  # <= 2 colonnes
+  ) +
+  
+  labs(
+    title = "Labour market slack",
+    subtitle = "Switzerland, 2010–2024",
+    x = "Year",
+    y = "share of total workforce (20-64 years old)",
+    caption = "Source: Eurostat, 2025"
+  ) +
+  
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(size = 12, colour = "grey30"),
+    axis.title.y = element_text(face = "bold"),
+    axis.title.x = element_text(face = "bold")
+  )
+ggsave("labourmarketslack.jpg", width = 25, height = 18, units = "cm")
