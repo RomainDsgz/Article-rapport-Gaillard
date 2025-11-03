@@ -128,15 +128,19 @@ line_data_long <- reshape(line_data,
                           timevar = "Country",
                           times = countries,
                           ids = 1:nrow(line_data))
+# Define custom color palette
+custom_colors <- c('blue', 'cyan3', 'goldenrod3', 'indianred3', 'chartreuse4', 'palevioletred4')
 
-# Create line plot
+# Create line plot with custom colors and data source
 p1 <- ggplot(line_data_long, aes(x = Year, y = Value, color = Country)) +
   geom_line(linewidth = 1) +
   labs(title = "Debt to GDP Ratios",
        y = "Debt to GDP Ratio",
-       x = "Year") +
+       x = "Year",
+       caption = "Data source: OECD (2024)") +
   theme_pubr() +
-  scale_color_manual(values = c('#66c2a5', '#fc8d62', '#8da0cb', '#e78ac3', '#a6d854', '#ffd92f'))
+  scale_color_manual(values = custom_colors) +
+  theme(plot.caption = element_text(size = 8, color = "gray40"))
 
 print(p1)
 
@@ -168,13 +172,16 @@ p2 <- ggbarplot(debt_comp_long,
                 y = "Value", 
                 fill = "Category",
                 color = "Category",
-                palette = "Set2",
+                palette = custom_colors,
                 title = "Debt Composition",
                 xlab = "Year",
                 ylab = "Percentage (%)") +
-  theme_pubr()
+  theme_pubr() +
+  labs(caption = "Data source: Swiss National Bank (2024)") +
+  theme(plot.caption = element_text(size = 8, color = "gray40"))
 
 print(p2)
+
 
 # Arrange both plots side by side
 combined_plot <- ggarrange(p1, p2, 
