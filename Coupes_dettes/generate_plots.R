@@ -112,7 +112,7 @@ years <- as.numeric(rownames(debt_wide))
 debt_wide$Year <- as.Date(paste0(years, "-01-01"))
 
 # Define countries of interest
-countries <- c('Switzerland', 'France', 'Germany', 'Italy', 'Greece', 'Estonia')
+countries <- c('Switzerland', 'France', 'Germany', 'Italy', 'Austria', 'Belgium')
 
 # Prepare data for line plot (convert to long format for ggplot)
 line_data <- data.frame(Year = debt_wide$Year)
@@ -134,13 +134,25 @@ custom_colors <- c('blue', 'cyan3', 'goldenrod3', 'indianred3', 'chartreuse4', '
 # Create line plot with custom colors and data source
 p1 <- ggplot(line_data_long, aes(x = Year, y = Value, color = Country)) +
   geom_line(linewidth = 1) +
-  labs(title = "Debt to GDP Ratios",
-       y = "Debt to GDP Ratio",
-       x = "Year",
-       caption = "Data source: OECD (2024)") +
+  labs(title = "Endettement public",
+       y = "Dette en PIB-années",
+       x = "Année",
+       caption = "Source: OECD (2024)") +
   theme_pubr() +
-  scale_color_manual(values = custom_colors) +
+  scale_color_manual(
+    values = custom_colors,
+    labels = c(
+      'Switzerland'='Suisse', 
+      'France'='France', 
+      'Germany'='Allemagne', 
+      'Italy'='Italie', 
+      'Austria'='Autriche', 
+      'Belgium'='Belgique'
+    )
+  ) 
   theme(plot.caption = element_text(size = 8, color = "gray40"))
+
+
 
 print(p1)
 
@@ -173,12 +185,30 @@ p2 <- ggbarplot(debt_comp_long,
                 fill = "Category",
                 color = "Category",
                 palette = custom_colors,
-                title = "Debt Composition",
-                xlab = "Year",
-                ylab = "Percentage (%)") +
+                title = "Porteurs des titres",
+                xlab = "Année",
+                ylab = "Part (%)") +
   theme_pubr() +
+  scale_fill_manual(values = custom_colors,
+                    labels = c(
+                      "Foreign.investors" = "Investisseurs étrangers",
+                      "Investment.funds" = "Fonds d'investissements (CH)",
+                      "Pension.funds" = "Fonds de pension (CH)",
+                      "Insurance.companies" = "Compagnies d'assurance (CH)",
+                      "Others..Switzerland" = "Autres (CH)",
+                      "Swiss.bank.positions" = "Banques (CH)"
+                    )) +
+  scale_color_manual(values = custom_colors,
+                     labels = c(
+                       "Foreign.investors" = "Investisseurs étrangers",
+                       "Investment.funds" = "Fonds d'investissements (CH)",
+                       "Pension.funds" = "Fonds de pension (CH)",
+                       "Insurance.companies" = "Compagnies d'assurance (CH)",
+                       "Others..Switzerland" = "Autres (CH)",
+                       "Swiss.bank.positions" = "Banques (CH)"
+                     )) +
   labs(caption = "Data source: Swiss National Bank (2024)") +
-  theme(plot.caption = element_text(size = 8, color = "gray40"))
+  theme(plot.caption = element_text(size = 8, color = "gray40")) 
 
 print(p2)
 
@@ -194,5 +224,5 @@ combined_plot <- ggarrange(p1, p2,
 print(combined_plot)
 
 # Save the plot
-ggsave('debt_and_composition.jpg', plot = combined_plot, width = 14, height = 7, dpi = 300)
+ggsave('debt_and_composition.jpg', plot = combined_plot, width = 16, height = 7, dpi = 300)
 
