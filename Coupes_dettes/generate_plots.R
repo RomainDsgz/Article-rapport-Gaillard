@@ -23,7 +23,8 @@ mesures <- mesures[, -which(names(mesures) == "Number")]
 colnames(mesures) <- c('Measure (FR)', 
                        'Measure (DE)', 
                        'Measure (EN, deepl)',
-                       'Category',                  
+                       'Category',   
+                       'Categorie',                       
                        '2027',                  
                        '2028',
                        '2029')
@@ -32,7 +33,7 @@ colnames(mesures) <- c('Measure (FR)',
 mesures$'Total from 2027 to 2029' <- mesures$`2027` + mesures$`2028` + mesures$`2029`
 
 # Group by category and sum
-measures_cat <- aggregate(`Total from 2027 to 2029` ~ Category, 
+measures_cat <- aggregate(`Total from 2027 to 2029` ~ Categorie, 
                           data = mesures, 
                           FUN = sum)
 
@@ -47,25 +48,25 @@ measures_cat <- measures_cat[order(measures_cat$Amount), ]
 
 # Create plot with ggpubr
 p <- ggbarplot(measures_cat, 
-               x = "Category", 
+               x = "Categorie", 
                y = "Amount",
                fill = "steelblue",
                color = "steelblue",
                sort.val = "asc",          # Sort ascending
                rotate = TRUE,             # Horizontal bars
                xlab = "",
-               ylab = "Budget cut (CHF mio)",
-               title = "Total 2027 to 2029") +
+               ylab = "Coupe (CHF mio)",
+               title = "Total des coupes sur la période 2027 - 2029") +
   theme_minimal() +
   ylim(0, 3000) +
-  labs(caption = "Data source: Federal Finance Dep. (2025); 'Programme d’allégement budgétaire 2027 - Aperçu des mesures'") +
-  theme(plot.caption = element_text(face = "italic", hjust = 0))
+  labs(caption = "Source: Dep. Fédéral des Finances (2025); 'Programme d’allégement budgétaire 2027 - Aperçu des mesures'") +
+  theme(plot.caption = element_text(face = "italic", hjust = 2.7))
 
 # Display plot
 print(p)
 
 # Save plot
-ggsave("cuts_bargraph_en.jpg", width = 18, height = 15, units = "cm", dpi = 300)
+ggsave("cuts_bargraph_en.jpg", width = 20, height = 15, units = "cm", dpi = 300)
 
 #######################################################
 ##          
@@ -81,16 +82,16 @@ debt_to_gdp_ratios <- read.csv('Data/debt_OECD.csv')
 
 # Create debt composition dataframe
 debt_composition <- data.frame(
-  `Investment funds` = c(26.2, 35.1, 37.6),
-  `Insurance companies` = c(22.9, 24.5, 27.4),
-  `Pension funds` = c(17.5, 8.8, 9.2),
-  `Swiss bank positions` = c(7.2, 6.1, 6.2),
-  `Others, Switzerland` = c(10.2, 6.7, 6.2),
-  `Foreign investors` = c(16.0, 18.8, 13.4)
+  `Investment funds` = c(26.2, 37.6),
+  `Insurance companies` = c(22.9, 27.4),
+  `Pension funds` = c(17.5, 9.2),
+  `Swiss bank positions` = c(7.2, 6.2),
+  `Others, Switzerland` = c(10.2, 6.2),
+  `Foreign investors` = c(16.0, 13.4)
 )
 
 # Set row names
-rownames(debt_composition) <- c("2010", "2023", "2024")
+rownames(debt_composition) <- c("2010", "2024")
 
 print(debt_composition)
 
@@ -128,6 +129,7 @@ line_data_long <- reshape(line_data,
                           timevar = "Country",
                           times = countries,
                           ids = 1:nrow(line_data))
+line_data_long$Value = line_data_long$Value/100
 # Define custom color palette
 custom_colors <- c('blue', 'cyan3', 'goldenrod3', 'indianred3', 'chartreuse4', 'palevioletred4')
 
@@ -136,8 +138,7 @@ p1 <- ggplot(line_data_long, aes(x = Year, y = Value, color = Country)) +
   geom_line(linewidth = 1) +
   labs(title = "Endettement public",
        y = "Dette en PIB-années",
-       x = "Année",
-       caption = "Source: OECD (2024)") +
+       x = "Année") +
   theme_pubr() +
   scale_color_manual(
     values = custom_colors,
@@ -149,8 +150,9 @@ p1 <- ggplot(line_data_long, aes(x = Year, y = Value, color = Country)) +
       'Austria'='Autriche', 
       'Belgium'='Belgique'
     )
-  ) 
-  theme(plot.caption = element_text(size = 8, color = "gray40"))
+  ) +
+  labs(caption = "Data source: OECD (2024)") +
+  theme(plot.caption = element_text(size = 8, color = "gray40")) 
 
 
 
@@ -176,7 +178,7 @@ debt_comp_long <- reshape(debt_composition,
 rownames(debt_comp_long) <- NULL
 
 # Convert Year to factor to ensure proper ordering
-debt_comp_long$Year <- factor(debt_comp_long$Year, levels = c("2010", "2023", "2024"))
+debt_comp_long$Year <- factor(debt_comp_long$Year, levels = c("2010", "2024"))
 
 # Create the bar plot - FIXED
 p2 <- ggbarplot(debt_comp_long, 
