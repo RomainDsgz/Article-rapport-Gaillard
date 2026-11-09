@@ -2,21 +2,22 @@
 # generate_updated_plots.R
 #
 # Generates, in three languages (FR / DE / EN):
-#   (A) an updated grouped bar plot comparing the planned budget cuts
-#       ("Message") with the cuts actually enacted by parliament
+#   (A) an updated grouped bar plot comparing the cuts recommended by the
+#       EP27/PAB27 plan with the cuts actually enacted by parliament
 #       ("Decision de l'Assemblee federale"), aggregated per category;
 #   (B) the public-debt line plot (debt in GDP-years);
 #   (C) the debt-holders composition stacked bar plot;
 #       (B) and (C) are combined side by side exactly like the old script.
 #
 # Reads : Data/gaillard_cut_updated_data.xlsx
-#         Data/debt_OECD.csv
+#         OECD SDMX API, dataset OECD.GOV.GIP:DSD_GOV@DF_GOV_PF_YU(1.0)
+#         https://sdmx.oecd.org/public/rest/data/
 # Writes: cuts_bargraph_updated_{fr,de,en}.jpg
 #         debt_and_composition_{fr,de,en}.jpg
 #
 # Run non-interactively with:  Rscript generate_updated_plots.R
-# This script does NOT modify generate_plots.R nor anything in Data/,
-# and does NOT overwrite the old outputs (cuts_bargraph_en.jpg,
+# This script does NOT modify generate_plots.R nor the Excel source in
+# Data/, and does NOT overwrite the old outputs (cuts_bargraph_en.jpg,
 # debt_and_composition.jpg).
 # =====================================================================
 
@@ -37,7 +38,7 @@ languages <- list(
       title   = "Total des coupes sur la période 2027 - 2029",
       ylab    = "Coupe (CHF mio)",
       xlab    = "",
-      msg     = "Message",
+      msg     = "Coupes recommandées par le\nplan EP27/PAB27",
       dec     = "Décision de l'Assemblée fédérale",
       caption = paste0("Source: Dep. Fédéral des Finances (2025); ",
                        "'Programme d'allégement budgétaire 2027 - Aperçu des mesures'")
@@ -47,7 +48,7 @@ languages <- list(
       title   = "Endettement public",
       y       = "Dette en PIB-années",
       x       = "Année",
-      caption = "Source des données: OCDE (2024)",
+      caption = "Source des données: OCDE (2026), API SDMX",
       legend_title = "Pays",
       countries = c(Switzerland = "Suisse", France = "France",
                     Germany = "Allemagne", Italy = "Italie",
@@ -76,7 +77,7 @@ languages <- list(
       title   = "Gesamte Kürzungen im Zeitraum 2027 - 2029",
       ylab    = "Kürzung (CHF Mio.)",
       xlab    = "",
-      msg     = "Botschaft",
+      msg     = "Empfohlene Kürzungen des\nEP27/PAB27-Plans",
       dec     = "Beschluss der Bundesversammlung",
       caption = paste0("Quelle: Eidgenössisches Finanzdepartement (2025); ",
                        "'Entlastungsprogramm 2027 - Übersicht der Massnahmen'")
@@ -85,7 +86,7 @@ languages <- list(
       title   = "Öffentliche Verschuldung",
       y       = "Schulden in BIP-Jahren",
       x       = "Jahr",
-      caption = "Datenquelle: OECD (2024)",
+      caption = "Datenquelle: OECD (2026), SDMX-API",
       legend_title = "Land",
       countries = c(Switzerland = "Schweiz", France = "Frankreich",
                     Germany = "Deutschland", Italy = "Italien",
@@ -113,7 +114,7 @@ languages <- list(
       title   = "Total cuts over the period 2027 - 2029",
       ylab    = "Cut (CHF mio)",
       xlab    = "",
-      msg     = "Message",
+      msg     = "Cuts recommended by the\nEP27/PAB27 plan",
       dec     = "Decision of the Federal Assembly",
       caption = paste0("Source: Federal Department of Finance (2025); ",
                        "'Fiscal relief programme 2027 - Overview of measures'")
@@ -122,7 +123,7 @@ languages <- list(
       title   = "Public debt",
       y       = "Debt in GDP-years",
       x       = "Year",
-      caption = "Data source: OECD (2024)",
+      caption = "Data source: OECD (2026), SDMX API",
       legend_title = "Country",
       countries = c(Switzerland = "Switzerland", France = "France",
                     Germany = "Germany", Italy = "Italy",
@@ -239,13 +240,33 @@ build_cuts_long <- function(catcol, lab) {
 ## Section B / C: data for the debt plots (logic reused from generate_plots.R)
 ## =====================================================================
 
-# Debt-to-GDP data -> wide format via base reshape.
-debt_to_gdp_ratios <- read.csv("Data/debt_OECD.csv")
+# Debt-to-GDP data from the OECD SDMX API (no local CSV).
+# Dataset: OECD.GOV.GIP:DSD_GOV@DF_GOV_PF_YU(1.0)
+# Key: FREQ.REF_AREA.MEASURE.UNIT_MEASURE.SECTOR.EDITION.CATEGORY
+#      A.AUT+BEL+CHE+DEU+FRA+ITA.GGD.PT_B1GQ.S13.YU.PF
+# The "+" is percent-encoded as %2B in the URL.
+oecd_debt_url <- paste0(
+  "https://sdmx.oecd.org/public/rest/data/",
+  "OECD.GOV.GIP,DSD_GOV@DF_GOV_PF_YU,1.0/",
+  "A.AUT%2BBEL%2BCHE%2BDEU%2BFRA%2BITA.GGD.PT_B1GQ.S13.YU.PF",
+  "?startPeriod=2007&format=csvfilewithlabels"
+)
+debt_raw <- read.csv(oecd_debt_url, stringsAsFactors = FALSE,
+                     check.names = FALSE)
+
+if (!all(c("TIME_PERIOD", "Reference area", "OBS_VALUE") %in% names(debt_raw))) {
+  stop("Unexpected response from the OECD API:\n",
+       paste(names(debt_raw), collapse = ", "))
+}
 
 # Keep only the columns needed by reshape; this avoids the harmless
-# "constant variables vary" reshape warning caused by the redundant
-# REF_AREA column and yields exactly the same wide table.
-debt_to_gdp_ratios <- debt_to_gdp_ratios[, c("TIME_PERIOD", "Reference.area", "OBS_VALUE")]
+# "constant variables vary" reshape warning and yields a clean wide table.
+debt_to_gdp_ratios <- data.frame(
+  TIME_PERIOD    = as.integer(debt_raw$TIME_PERIOD),
+  Reference.area = debt_raw[["Reference area"]],
+  OBS_VALUE      = as.numeric(debt_raw$OBS_VALUE),
+  stringsAsFactors = FALSE
+)
 
 debt_wide <- reshape(debt_to_gdp_ratios,
                      idvar = "TIME_PERIOD",
