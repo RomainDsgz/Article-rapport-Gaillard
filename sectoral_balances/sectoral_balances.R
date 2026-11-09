@@ -1,158 +1,172 @@
-# clean environment 
-rm(list=ls())
+# =====================================================================
+# sectoral_balances.R
+#
+# Downloads AMECO data from the ECFIN Redisstat SDMX API and prepares the
+# three-sector sectoral-balance series for Switzerland.
+#
+# Data source
+#   AMECO (DG ECFIN, European Commission), ECFIN Redisstat SDMX 2.1 API
+#   https://webgate.ec.europa.eu/ecfin/redisstat/api/dissemination/sdmx/2.1/
+#   API guide:
+#   https://economy-finance.ec.europa.eu/economic-research-and-databases/economic-databases/ameco-database/bulk-downloads-and-api-access_en
+#
+# Series retrieved (annual, Switzerland, current prices, Mrd CHF)
+#   UBLA  Net lending (+) / net borrowing (-), total economy    (chapter 10-01)
+#   UBLG  Net lending (+) / net borrowing (-), general government (chapter 16-03)
+#   UVGN  Gross national income at current market prices         (chapter 05-01)
+#   UBLC  Net lending (+) / net borrowing (-), corporations     (chapter 14-03)
+#   UBLH  Net lending (+) / net borrowing (-), households       (chapter 15-03)
+#
+# The old manually downloaded AMECO .TXT files (`ameco0/`) and the cached
+# `ameco.RData` are no longer used and have been removed.
+#
+# Outputs
+#   sectoral_balances_data.csv
+#   sectoral_balances_data.rds
+#   3sectors_balances_CHE_fr.jpg
+#   3sectors_balances_CHE_de.jpg
+#   3sectors_balances_CHE_en.jpg
+#   3sectors_balances_CHE.jpg   (English default, kept for backwards compatibility)
+#
+# Run with: Rscript sectoral_balances.R
+# =====================================================================
 
-# Obtaining and cleaning the data 
-# Manually download .txt zip from https://ec.europa.eu/info/business-economy-euro/indicators-statistics/economic-databases/macro-economic-database-ameco/download-annual-data-set-macro-economic-database-ameco_en
-# 
-files <- dir("ameco0", ".TXT", full.names = TRUE)
-
-# Load packages for data extraction
-library(dplyr)
-library(tidyr)
-library(tibble)
-# Read files, bind together, clean, save
-all_files <- lapply(files, function(file) {
-  read.table(file, TRUE, ";", fill = TRUE,
-             stringsAsFactors = FALSE, strip.white = TRUE)
+# Make `Rscript path/to/sectoral_balances.R` work from any directory.
+local({
+  args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("^--file=", args, value = TRUE)
+  if (!interactive() && length(file_arg)) {
+    script_path <- sub("^--file=", "", file_arg[1])
+    if (file.exists(script_path)) {
+      setwd(dirname(normalizePath(script_path)))
+    }
+  }
 })
 
-#@unlink(temp_dir, recursive = TRUE)
+library(dplyr)
+library(tidyr)
+library(readr)
 
-ameco <- do.call(rbind, all_files)
-ameco <- tibble::as_tibble(ameco)
-#Drop stray/empty last column
-ameco <- ameco[, -ncol(ameco)] 
-names(ameco) <- tolower(names(ameco))
-# Extract short country names 
-ameco$cntry <- regmatches(ameco$code, regexpr("^[[:alnum:]+]", ameco$code))
+ameco_base <- "https://webgate.ec.europa.eu/ecfin/redisstat/api/dissemination/sdmx/2.1/data/ECFIN"
 
-# Convert to long format 
-ameco <- gather(ameco, key = year, value = value, starts_with("x"))
-ameco$year <- gsub("x", "", ameco$year)
-ameco$year <- as.numeric(ameco$year)
-ameco$value <- suppressWarnings(as.numeric(ameco$value))
+# Download one annual AMECO series through the SDMX-CSV endpoint.
+fetch_ameco <- function(chapter, item, country = "CHE", start = 1995) {
+  url <- sprintf(
+    "%s,AMECO_CHAPTER%s,1.0/A.%s.1.0.0.0.%s?startPeriod=%d&format=SDMX-CSV",
+    ameco_base, chapter, country, item, start
+  )
+  dat <- utils::read.csv(url, stringsAsFactors = FALSE, check.names = FALSE)
+  needed <- c("ITEM", "TIME_PERIOD", "OBS_VALUE")
+  if (!all(needed %in% names(dat))) {
+    stop(
+      "Unexpected response from the AMECO API for ", item, ".\n",
+      "Columns returned: ", paste(names(dat), collapse = ", "),
+      "\nURL: ", url
+    )
+  }
+  keep <- intersect(c("ITEM", "TIME_PERIOD", "OBS_VALUE", "OBS_STATUS"), names(dat))
+  dat[, keep, drop = FALSE]
+}
 
-# Save prepared data                                
-save(ameco, file = "ameco.RData", 
-     compress = "xz")
+# Chapter / item pairs. Each dataflow in the AMECO API contains one chapter.
+series <- list(
+  UBLA = c(chapter = "10-01", item = "UBLA"),
+  UBLG = c(chapter = "16-03", item = "UBLG"),
+  UVGN = c(chapter = "05-01", item = "UVGN"),
+  UBLC = c(chapter = "14-03", item = "UBLC"),
+  UBLH = c(chapter = "15-03", item = "UBLH")
+)
 
-# Load packages for analysis 
-library(ggplot2)
-library(reshape2)
+# Download and bind the series.
+ameco_raw <- bind_rows(lapply(names(series), function(nm) {
+  x <- fetch_ameco(series[[nm]][["chapter"]], series[[nm]][["item"]])
+  x$series <- nm
+  x
+}))
 
-# Load data
-load("ameco.RData")
+if (!"OBS_STATUS" %in% names(ameco_raw)) {
+  ameco_raw$OBS_STATUS <- NA_character_
+}
 
-# Extract data for Switzerland (CHE)
-ch <- subset(ameco, country == "Switzerland")
+ameco <- ameco_raw %>%
+  transmute(
+    year   = as.integer(TIME_PERIOD),
+    item   = ITEM,
+    value  = suppressWarnings(as.numeric(OBS_VALUE)),
+    status = OBS_STATUS
+  ) %>%
+  filter(!is.na(year)) %>%
+  distinct(year, item, .keep_all = TRUE) %>%
+  arrange(year, item)
 
-# Codes of the different variables for Net lending - Net borrowing (Mrd CHF)
-# Find codes for Net lending/Net borrowing 
-# Private Sector 
-  # UBLC = Net lending - Net borrowing of Corporations (Financial and Non-Financial) (Mrd National Currency)
-  # UBLH = Net lending - Net borrowing of Households and non-profit Institutions serving households (Mrd National Currency)
-# Public Sector 
-  # URTG = General Government revenue
-  # UUTG = General government expenses
-   # Note that URTG - UUTG = UBLG
-  # UBLG = General Government (Mrd National Currency)
-# Rest of the world 
-  # UXGS = Exports of goods and services
-  # UMGS = Imports of goods and services 
-  # Note that UXGS - UMGS =/= CAB, as it requires foreign net income. 
-  #For this reason, we will use UBLA
-    # UBLA = Rest of the World : UBLA (Mrd National Currency)
-# UVGN = Gross National Income (Current prices)
+# Long -> wide.
+dfw <- ameco %>%
+  select(year, item, value) %>%
+  pivot_wider(names_from = item, values_from = value) %>%
+  arrange(year)
 
-UBLC <- subset(ch, code == "CHE.1.0.0.0.UBLC")
-UBLH <- subset(ch, code == "CHE.1.0.0.0.UBLH")
-URTG <- subset(ch, code == "CHE.1.0.0.0.URTG")
-UUTG <- subset(ch, code == "CHE.1.0.0.0.UUTG")
-UBLG <- subset(ch, code == "CHE.1.0.0.0.UBLG")
-UXGS <- subset(ch, code == "CHE.1.0.0.0.UXGS")
-UMGS <- subset(ch, code == "CHE.1.0.0.0.UMGS")
-UBLA <- subset(ch, code == "CHE.1.0.0.0.UBLA")
-UVGN <- subset(ch, code == "CHE.1.0.0.0.UVGN")
+required <- c("UBLA", "UBLG", "UVGN")
+if (!all(required %in% names(dfw))) {
+  stop("Missing required AMECO series: ",
+       paste(setdiff(required, names(dfw)), collapse = ", "))
+}
 
-# Merge them into one dataframe
-df <- rbind(UBLC, UBLH,URTG, UUTG, UBLG, UXGS, UMGS, UBLA, UVGN)
+# ---------------------------------------------------------------------
+# Sectoral balances
+#   (S - I) + (T - G) + (-CAB) = 0
+#
+#   pub = UBLG                       (general government)
+#   row = -UBLA                      (rest of the world)
+#   priv = -pub - row                (private sector, from the identity)
+# ---------------------------------------------------------------------
+dfw <- dfw %>%
+  mutate(
+    pub      = UBLG,
+    row      = -UBLA,
+    priv     = -pub - row,
+    priv_bal = priv / UVGN * 100,
+    pub_bal  = pub / UVGN * 100,
+    row_bal  = row / UVGN * 100,
+    balances = priv_bal + pub_bal + row_bal
+  )
 
-# Select vars
-myvars <- c("year", "code", "value")
-df <- df[myvars]
+# Use the latest uninterrupted year with complete data for the three
+# required series. In the current AMECO vintage 2024 is missing for
+# UBLA/UVGN while 2025-2027 are forecasts; plotting across that gap would
+# break the stacked bars, so the sample stops in 2023.
+years_all <- sort(unique(dfw$year))
+complete_flag <- complete.cases(dfw[match(years_all, dfw$year), required])
+first_incomplete <- which(!complete_flag)[1]
+last_year <- if (is.na(first_incomplete)) {
+  max(years_all)
+} else {
+  years_all[first_incomplete] - 1
+}
+if (is.na(last_year) || last_year < 1995) {
+  stop("No complete year found in AMECO data.")
+}
 
-# Long to wide 
-dfw <- spread (df,
-               key = code,
-               value = value)
+dfw <- dfw %>%
+  filter(year >= 1995, year <= last_year) %>%
+  arrange(year)
 
-# rename codes
-dfw <- rename(dfw, UBLC = "CHE.1.0.0.0.UBLC")
-dfw <- rename(dfw, UBLH = "CHE.1.0.0.0.UBLH")
+# Sanity check: the three balances must sum to zero.
+if (any(is.na(dfw$balances))) {
+  stop("Missing values remain in the sectoral balances.")
+}
+if (any(abs(dfw$balances) > 1e-8)) {
+  stop("Sectoral balances do not sum to zero. Check the AMECO series.")
+}
 
-dfw <- rename(dfw, URTG = "CHE.1.0.0.0.URTG")
-dfw <- rename(dfw, UUTG = "CHE.1.0.0.0.UUTG")
-dfw <- rename(dfw, UBLG = "CHE.1.0.0.0.UBLG")
+# Save the prepared data.
+write_csv(dfw, "sectoral_balances_data.csv", na = "")
+saveRDS(dfw, "sectoral_balances_data.rds")
 
-dfw <- rename(dfw, UXGS = "CHE.1.0.0.0.UXGS")
-dfw <- rename(dfw, UMGS = "CHE.1.0.0.0.UMGS")
-dfw <- rename(dfw, UBLA = "CHE.1.0.0.0.UBLA")
+cat(sprintf("[data] AMECO series downloaded: %s\n", paste(names(series), collapse = ", ")))
+cat(sprintf("[data] Years: %d-%d (%d observations)\n", min(dfw$year), last_year, nrow(dfw)))
+cat(sprintf("[data] Max |private + public + rest-of-world| = %.3e\n",
+            max(abs(dfw$balances))))
+cat("[data] Saved sectoral_balances_data.csv and sectoral_balances_data.rds\n")
 
-dfw <- rename(dfw, UVGN = "CHE.1.0.0.0.UVGN")
-
-#Now that the data is ready, we can now determine the macroeconomic sectoral balances. 
-# (S - I)+ (T - G) + (- CAB) ≡ 0 
-
-## Public Sector can be found via two methods:
-dfw$pub <- dfw$URTG - dfw$UUTG # Revenues - Expenses 
-  # Or use Net lending - Net borrowing of public sector (UBLG)
-dfw$pub <- dfw$UBLG
-
-## Rest of the World
-  # According to Mitchell, Wray and Watts (2019), CAB = Exports - Imports + Foreign Net Income
-  # Note that row_bal nets tp be expressed as -CAB
-dfw$row <- dfw$UBLA  * (-1)
-dfw$row
-## Private Sector
-  #Since AMECO does not include some financial data, the sum of Net lending - Net borrowing of Corporations (UBLC) + Net lending - Net borrowing of Households (UBLH) =/= Private sector balance
-  # Hence, we can use (S - l) ≡ (G - T) + (X - M + FNl) ≡ (G - T) + CAB
-
-  # Note that the sign of pub_bal is inversed, since the deficit of the public sector is the surplus of the private sector
-dfw$priv <- (dfw$pub *(-1)) - dfw$row
-# Now that we have all balances, we can check the equality (S - I)+ (T - G) + (- CAB) ??? 0
-dfw$bal <- dfw$priv + dfw$pub + dfw$row
-dfw$bal 
-head(dfw$bal)
-# Now we can calculate the share (in % of GNI)
-dfw$priv_bal <- (dfw$priv/dfw$UVGN)*100
-dfw$pub_bal <- (dfw$pub/dfw$UVGN)*100
-dfw$row_bal <- (dfw$row/dfw$UVGN) *100
-
-# Check if equality (S-I) + (G-T) + (-CAB) = 0
-
-dfw$balances <- dfw$priv_bal + dfw$pub_bal + dfw$row_bal
-dfw$balances
-
-# Prepare the data for plotting for 3 sectors 
-melted_df <- dfw %>%
-  select(year, priv_bal, pub_bal, row_bal) %>%
-  gather(key = "variable", value = "value", -year)
-colors3 <- c("indianred3", "chartreuse4", "turquoise3")
-
-plot_3sectors <- ggplot() + 
-  geom_bar(data = subset(melted_df, year >= 1995 & year<=2025), aes(x = year, y = value, fill = variable), stat = "identity") + 
-  geom_vline(xintercept = 2003, linetype = "dotted", lwd = 0.8) + #Added a vertical line for the year of introduction of the debt brake in Switzerland
-  scale_fill_manual(values = colors3,
-                    labels = c("Private sector", "Public Sector", "Rest of the World")) +
-  labs(x = "Year", y = "Net lending - Net borrowing", fill = "Balances") + 
-  theme_minimal() + 
-  scale_x_continuous(breaks = seq(1995, 2025, by = 5)) +
-  theme(legend.position = "bottom") + 
-  guides(fill = guide_legend(nrow=1)) +
-  labs(title = "Sectoral balances",
-       subtitle = "Switzerland, 1995-2025", 
-       caption = "Source: AMECO. By @RomainDsgz")
-print(plot_3sectors)  
-ggsave("3sectors_balances_CHE.jpg", width = 18, height = 15, units = "cm")
-## Another way 
-
+# Regenerate the plots in French, German and English.
+source("generate_plots.R")
