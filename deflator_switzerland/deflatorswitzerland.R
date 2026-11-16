@@ -7,7 +7,7 @@ rm(list = ls())
 # Manually download .txt zip from
 
 
-files <- dir("C:/Users/rdesg/Documents/deflator_switzerland/ameco0", "*.TXT", full.names = TRUE)
+files <- dir("C:/Users/Romain/Documents/GitHub/Article-rapport-Gaillard/deflator_switzerland/ameco0", "*.TXT", full.names = TRUE)
 
 ## Open libraries 
 # load packages
@@ -16,7 +16,6 @@ library(tidyr)
 library(tibble)
 library(ggpubr)
 
-install.packages("ggpubr")
 # Read files, bind together, clean, save
 all_files <- lapply(files, function(file) {
   read.table(file, TRUE, ";", fill = TRUE,
@@ -38,7 +37,7 @@ ameco$year <- gsub("x", "", ameco$year)
 ameco$year <- as.numeric(ameco$year)
 ameco$value <- suppressWarnings(as.numeric(ameco$value))
 
-save(ameco, file = "C:/Users/rdesg/Documents/deflator_switzerland/ameco.RData", compress = "xz")
+save(ameco, file = "C:/Users/Romain/Documents/GitHub/Article-rapport-Gaillard/deflator_switzerland/ameco.RData", compress = "xz")
 
 ###################################################
 
@@ -50,7 +49,7 @@ library(reshape2)
 library(tibble)
 
 # Load the data
-load("C:/Users/rdesg/Documents/deflator_switzerland/ameco.RData")
+load("C:/Users/Romain/Documents/GitHub/Article-rapport-Gaillard/deflator_switzerland/ameco.RData")
 
 ch <- subset(ameco, cntry == "CHE")
 
@@ -101,7 +100,7 @@ dfw$sum_UTVT_UWCD_UQGD <- dfw$UTVT + dfw$UWCD + dfw$UQGD
 dfw <- dfw %>% mutate(GDP_deflator = UVGD / OVGD)
 
 # Isolate GDP deflator (for project gofog)
-GDPdefl <- dfw$GDP_deflator[c(36:64)]
+GDPdefl <- dfw$GDP_deflator[c(36:66)]
 GDPdefl
 # Compute components
 dfw <- dfw %>% mutate(
@@ -146,26 +145,7 @@ my_plot <- ggplot() +
   scale_color_manual(name = "", values = "black", labels = "GDP Deflator") +
   labs(title = "GDP Deflator income side", 
        subtitle = "Switzerland 1995-2025", 
-       caption = "Source: AMECO. Original Script by @gmvidl. Adaptation from Desgraz (2023)")
+       caption = "Source: AMECO. Original Script by @gmvidl, adapted by authors")
 
 print(my_plot)
-ggsave(filename = "my_plot2025.png", plot = last_plot(), device = png, path = NULL) 
-
-
-my_plot2020 <- ggplot() +
-  geom_bar(data = subset(melted_df, year >= 1995 & year <= 2020), aes(x = year, y = value, fill = variable), stat = "identity") +
-  geom_line(data = subset(dfw, year >= 1995 & year <= 2020), aes(x = year, y = perc_change_GDP_deflator, color = "GDP deflator"), size = 1) +
-  #geom_point(data = subset(dfw, year >= 1995 & year <= 2019),aes(x=year, y = unit_labor_costs)) +
-  scale_fill_manual(values = c("gross_operating_surplus_contrib" = "palevioletred4", "labor_prod_contrib" = "green", "net_indirect_taxes_contrib" = "indianred3", "wages_contrib" = "chartreuse4"),
-                    labels = c("Unit Profits", "Labor Productivity", "Unit Taxes",  "Wages")) +
-  labs(x = "Year", y = "Annual percentage changes; p.p. contributions", fill = "Contributions", color = "") +
-  theme_minimal() +
-  theme(plot.background = element_rect(fill = "white")) + 
-  scale_x_continuous(breaks = seq(1960, 2020, by = 5)) +
-  scale_color_manual(name = "", values = "black", labels = "GDP Deflator") +
-  labs(title = "GDP Deflator income side", 
-       subtitle = "Switzerland 1995-2020", 
-       caption = "Source: AMECO. Original Script by @gmvidl. Adaptation from author")
-figure <- ggarrange(my_plot2019, my_plot2020,
-                    ncol = 2, nrow =1)
-figure
+ggsave(filename = "my_plot2026.png", plot = last_plot(), device = png, path = NULL) 
